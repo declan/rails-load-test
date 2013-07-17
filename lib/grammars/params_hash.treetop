@@ -1,0 +1,32 @@
+grammar ParamsHash
+
+  rule hash
+    '{' key_val_list '}'
+  end
+
+  rule key_val_list
+    key_val_pair (', ' key_val_pair)*
+  end
+
+  rule key_val_pair
+    key '=>' val
+  end
+
+  rule val
+    str / array / hash
+  end
+
+  rule array
+    '["3"]'
+  end
+
+  rule key
+    str
+  end
+
+  rule str
+    # \u2713 is the utf-8 encoding for a checkmark.
+    '"' [:?!\.@\[\]=\/\-\+ \w\u2713]+ '"' / '""'
+  end
+
+end
