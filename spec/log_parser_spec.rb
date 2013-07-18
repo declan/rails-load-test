@@ -1,7 +1,17 @@
 require 'spec_helper'
 
+class IODouble
+  attr_reader :write_buffer
+  def initialize
+    @write_buffer = []
+  end
+  def write(output)
+    @write_buffer << output
+  end
+end
+
 describe LogParser do
-  let(:outfile) { double(:class => IO) }
+  let(:outfile) { IODouble.new }
   let(:request) { LogParser::Request.new('192.168.16.666', '/goodnight-moon.cfs') }
   let(:parser) { LogParser.new("spec/fixtures/test.log", :outfile => outfile) }
 
@@ -18,12 +28,37 @@ describe LogParser do
     end
   end
 
-  it '#print_summary(file_descriptor)' do
-    parser = LogParser.new("spec/fixtures/get_and_post_and_blacklisted_requests.log")
-    parser.parse
-    outfile.should_receive(:write).with("# Parsed 5 requests from 3 ip addresses.\n")
-    outfile.should_receive(:write).with("# 3 GET requests and 2 POST requests.\n")
-    parser.print_summary(outfile)
+  describe '#print_summary(file_descriptor)' do
+    it "prints number of requests and ip addresses" do
+      parser = LogParser.new("spec/fixtures/get_and_post_requests.log", :outfile => outfile)
+      parser.parse
+      parser.print_summary(outfile)
+      outfile.write_buffer.should include("# Parsed 5 requests from 3 ip addresses.\n")
+    end
+
+    it "prints numbers of GET and POST requests" do
+      parser = LogParser.new("spec/fixtures/get_and_post_requests.log", :outfile => outfile)
+      parser.parse
+      parser.print_summary(outfile)
+      outfile.write_buffer.should include("# 3 GET requests and 2 POST requests.\n")
+    end
+
+    it "with errors" do
+      parser = LogParser.new("spec/fixtures/get_and_post_and_malformed_requests.log", :outfile => outfile)
+      parser.parse
+      parser.print_summary(outfile)
+      outfile.write_buffer.should include("# Encountered 2 errors: 1 request parse errors and 1 hash parse errors.\n")
+    end
+  end
+
+  describe '#print_errors(file_descriptor' do
+    it "prints all errors encountered" do
+      errors_outfile = IODouble.new
+      parser = LogParser.new("spec/fixtures/get_and_post_and_malformed_requests.log", :outfile => outfile)
+      parser.parse
+      parser.print_errors(errors_outfile)
+      errors_outfile.write_buffer.join('').should =~ /Started GET "\/autocomplete/
+    end
   end
 
   describe "#parse_request(file_descriptor)" do
@@ -63,6 +98,12 @@ describe LogParser do
       fd = File.open("spec/fixtures/delete_requests.log", "r")
       request = parser.parse_request(fd)
       request.path.should == '/programs/tumbling-4-success/locations/6144 method=POST contents="program_id=tumbling-4-success&id=6144&_method=delete"'
+    end
+
+    it "returns the first valid request, even if that is not the next line in the file" do
+      fd = File.open("spec/fixtures/request_at_bottom.log", "r")
+      request = parser.parse_request(fd)
+      request.path.should == '/foozle'
     end
 
   end
@@ -134,11 +175,11 @@ describe LogParser do
       parser.push_request(LogParser::Request.new("127.0.0.1", "/goodnight-moon.cfs"))
       parser.push_request(LogParser::Request.new("127.0.0.1", "/goodnight-mush.cfs"))
       parser.push_request(LogParser::Request.new("192.11.10.591", "/aardvarks-anonymous.jsp"))
-      outfile.should_receive(:write).with("/goodnight-moon.cfs\n")
-      outfile.should_receive(:write).with("/goodnight-mush.cfs\n")
-      outfile.should_receive(:write).with("\n")  # separate sessions with a blank line
-      outfile.should_receive(:write).with("/aardvarks-anonymous.jsp\n")
       parser.print_sessions
+      outfile.write_buffer.should include("/goodnight-moon.cfs\n")
+      outfile.write_buffer.should include("/goodnight-mush.cfs\n")
+      outfile.write_buffer.should include("\n")  # separate sessions with a blank line
+      outfile.write_buffer.should include("/aardvarks-anonymous.jsp\n")
     end
   end
 end

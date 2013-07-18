@@ -16,7 +16,8 @@ describe StrToHash do
       '{"binder"=>{"name"=>"CF Binder"}}' => {"binder"=>{"name"=>"CF Binder"}},
       '{"authenticity_token"=>"FfrigJj4WBs+iuoNlH1vlojQyvhj2Ce7NSMo7RMcvqo=", "binder"=>{"name"=>"CF Binder"}}' => { "authenticity_token"=>"FfrigJj4WBs+iuoNlH1vlojQyvhj2Ce7NSMo7RMcvqo=", "binder"=>{"name"=>"CF Binder"}},
       '{"utf8"=>"✓", "authenticity_token"=>"FfrigJj4WBs+iuoNlH1vlojQyvhj2Ce7NSMo7RMcvqo=", "binder"=>{"name"=>"CF Binder"}}' => {"utf8"=>"✓", "authenticity_token"=>"FfrigJj4WBs+iuoNlH1vlojQyvhj2Ce7NSMo7RMcvqo=", "binder"=>{"name"=>"CF Binder"}},
-      '{"dataset_ids"=>["", "3"]}' => {'dataset_ids' => ['', '3']}
+      '{"dataset_ids"=>["3"]}' => {'dataset_ids' => ['3']},
+      '{"dataset_ids"=>["", "3", "92"]}' => {'dataset_ids' => ['', '3', '92']}
     }.each do |str, hash|
       it str do
         StrToHash.hash(parse_tree).should == hash

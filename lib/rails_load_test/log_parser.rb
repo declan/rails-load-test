@@ -9,6 +9,9 @@ class LogParser
     @password = options[:password]
     @num_get_requests = 0
     @num_post_requests = 0
+    @request_parse_errors = []
+    @hash_parse_errors = []
+    @debug = options[:debug]
   end
 
   def parse
@@ -18,8 +21,11 @@ class LogParser
         push_request(request)
       end
       print_sessions
+      return true
     rescue
       print_summary(STDERR)
+      print_errors(STDERR) if @debug == true
+      return false
     ensure
       fd.close
     end
@@ -38,10 +44,14 @@ class LogParser
 
   def parse_get_request(line, file_descriptor)
     matches = log_regexps[:get].match(line)
-    STDERR.puts "could not parse line \"#{line}\"" if matches.nil?
-    request = Request.new(matches.captures[1], matches.captures[0])
-    @num_get_requests += 1
-    request
+    if matches.nil?
+      @request_parse_errors << "Could not parse line \"#{line}\"\n"
+      parse_request(file_descriptor)
+    else
+      request = Request.new(matches.captures[1], matches.captures[0])
+      @num_get_requests += 1
+      request
+    end
   end
 
   def parse_post_request(line, file_descriptor)
@@ -58,20 +68,24 @@ class LogParser
 
   def _parse_request_helper(line, file_descriptor, method)
     matches = log_regexps[method].match(line)
-    STDERR.puts "could not parse line \"#{line}\"" if matches.nil?
-    params_hash = parse_params(file_descriptor)
-    params_hash["_method"] = method.to_s unless method == :post
-    content = matches.captures[0] + ' method=POST contents="' + params_hash_to_httperf(params_hash) + '"'
-    request = Request.new(matches.captures[1], content)
-    @num_post_requests += 1
-    request
+    if matches.nil?
+      @request_parse_errors << "Could not parse line \"#{line}\"\n" if matches.nil?
+      parse_request(file_descriptor)
+    else
+      params_hash = parse_params(file_descriptor)
+      params_hash["_method"] = method.to_s unless method == :post
+      content = matches.captures[0] + ' method=POST contents="' + params_hash_to_httperf(params_hash) + '"'
+      request = Request.new(matches.captures[1], content)
+      @num_post_requests += 1
+      request
+    end
   end
 
   def parse_params(file_descriptor)
     params_str = get_params(file_descriptor)
     params_hash = StrToHash.parse(params_str)
     if params_hash.nil?
-      STDERR.puts "StrToHash failed to parse \"#{params_str}\""
+      @hash_parse_errors << "StrToHash failed to parse \"#{params_str}\""
       {}
     else
       params_hash
@@ -111,12 +125,14 @@ class LogParser
   end
 
   def print_sessions
+    outfile = File.open(@outfile, "w")
     @sessions.each_with_index do |requests, i|
       requests[1].each do |request|
-        @outfile.write(request + "\n")
+        outfile.write(request + "\n")
       end
-      @outfile.write("\n") unless i == (@sessions.length - 1)
+      outfile.write("\n") unless i == (@sessions.length - 1)
     end
+    outfile.close
   end
 
   def push_request(request)
@@ -139,6 +155,17 @@ class LogParser
   def print_summary(file_descriptor)
     file_descriptor.write("# Parsed #{num_requests_parsed} requests from #{num_ip_addresses_parsed} ip addresses.\n")
     file_descriptor.write("# #{num_get_requests} GET requests and #{num_post_requests} POST requests.\n")
+    if @request_parse_errors.any? or @hash_parse_errors.any?
+      file_descriptor.write("# Encountered #{@request_parse_errors.length + @hash_parse_errors.length} errors: #{@request_parse_errors.length} request parse errors and #{@hash_parse_errors.length} hash parse errors.\n")
+    end
+  end
+
+  def print_errors(file_descriptor)
+    file_descriptor.write("# Request parse errors:\n")
+    @request_parse_errors.each { |error| file_descriptor.write(error + "\n") }
+    file_descriptor.write("\n")
+    file_descriptor.write("# Hash parse errors:\n")
+    @hash_parse_errors.each { |error| file_descriptor.write(error + "\n") }
   end
 
   def num_requests_parsed
